@@ -90,10 +90,10 @@ const mock = (() => {
     return true;
   });
   const defaults = {
-    pb_tasks: { note: "", day: null, area: "личное", priority: 0, in_plan: false, done_at: null, moves: 0, sort: 0 },
+    pb_tasks: { repeat: "", note: "", day: null, area: "личное", priority: 0, in_plan: false, done_at: null, moves: 0, sort: 0 },
     pb_ideas: { status: "new", value: null, feasibility: null, effort: null, check_plan: "", area: "личное", ai_review: "", ai_at: null },
     pb_expenses: { category: "Другое", kind: "личное", note: "" },
-    pb_settings: { morning: "08:00", evening: "21:00", tz: "Europe/Moscow", push_on: true, categories: ["Еда", "Кафе", "Транспорт", "Дом", "Здоровье", "Одежда", "Связь", "Подписки", "Подарки", "Развлечения", "Работа", "Другое"], budget: null },
+    pb_settings: { morning: "08:00", evening: "21:00", tz: "Europe/Moscow", push_on: true, categories: ["Еда", "Кафе", "Транспорт", "Дом", "Здоровье", "Одежда", "Связь", "Подписки", "Подарки", "Развлечения", "Работа", "Другое"], budget: null, weekly_on: true },
     pb_days: { intention: "", mood: null, energy: null, load: null, note: "", win: "" },
     pb_habits: { active: true, sort: 0 },
   };

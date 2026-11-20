@@ -11,7 +11,7 @@ async function subscribe() {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) throw new Error(ios() && !standalone() ? "Сначала добавьте приложение на экран «Домой» и откройте его оттуда" : "Это устройство не поддерживает уведомления");
   const perm = await Notification.requestPermission();
   if (perm !== "granted") throw new Error("Уведомления запрещены. Разрешите: Настройки iPhone → Уведомления → Личный помощник");
-  const reg = await navigator.serviceWorker.ready;
+  const reg = await Promise.race([navigator.serviceWorker.ready, new Promise((_, no) => setTimeout(() => no(new Error("Приложение ещё не готово к уведомлениям — закройте и откройте его снова")), 8000))]);
   const { key } = await fn({ action: "vapid" });
   let sub = await reg.pushManager.getSubscription();
   if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(key) });
@@ -24,7 +24,8 @@ export async function render(main) {
   const st = S.set || {};
   const subs = await list("pb_push", []);
   let mySub = null;
-  try { mySub = await (await navigator.serviceWorker?.ready)?.pushManager?.getSubscription(); } catch (e) {}
+  const swReady = () => Promise.race([navigator.serviceWorker?.ready, new Promise((r) => setTimeout(() => r(null), 1500))]);
+  try { mySub = await (await swReady())?.pushManager?.getSubscription(); } catch (e) {}
   const here = mySub && subs.some((s) => s.endpoint === mySub.endpoint);
   const perm = "Notification" in window ? Notification.permission : "нет";
   main.innerHTML = `<div class="top"><div><a href="#/more" class="small">← Ещё</a><h1>Настройки</h1></div></div>
@@ -34,6 +35,7 @@ export async function render(main) {
       <button class="btn ${here ? "" : "pri"} sm" id="sub">${here ? "Проверить" : "Включить"}</button></div>
       <div class="row2"><div><label class="f">☀️ Утром</label><input type="time" id="mor" value="${String(st.morning || "08:00").slice(0, 5)}"></div><div><label class="f">🌙 Вечером</label><input type="time" id="eve" value="${String(st.evening || "21:00").slice(0, 5)}"></div></div>
       <label class="chk row" style="margin-top:12px"><input type="checkbox" id="pon" ${st.push_on !== false ? "checked" : ""} style="width:22px;height:22px"> <span>Присылать утреннее и вечернее напоминание</span></label>
+      <label class="chk row" style="margin-top:10px"><input type="checkbox" id="won" ${st.weekly_on !== false ? "checked" : ""} style="width:22px;height:22px"> <span>По воскресеньям — напоминание об итогах недели</span></label>
       <label class="f">Часовой пояс</label><select id="tz">${["Europe/Kaliningrad", "Europe/Moscow", "Europe/Samara", "Asia/Yekaterinburg", "Asia/Omsk", "Asia/Novosibirsk", "Asia/Krasnoyarsk", "Asia/Irkutsk", "Asia/Vladivostok", "Asia/Dubai", "Europe/Istanbul", "Asia/Yerevan", "Asia/Tbilisi"].map((z) => `<option ${z === (st.tz || "Europe/Moscow") ? "selected" : ""}>${z}</option>`).join("")}</select>
       <p class="hint">Утром — план и задачи на день, вечером — итоги. Приходят в пределах 5 минут от выбранного времени.</p></div>
     <h3>Траты</h3>
@@ -59,7 +61,7 @@ export async function render(main) {
   $("#catf", main).onsubmit = (e) => { e.preventDefault(); const v = $("input", e.target).value.trim(); if (v && !cats.includes(v)) cats.push(v); $("input", e.target).value = ""; drawCats(); };
   $("#save", main).onclick = (ev) => busy(ev.currentTarget, async () => {
     const budget = +String($("#bud", main).value).replace(/\s/g, "").replace(",", ".") || null;
-    const patch = { morning: $("#mor", main).value || "08:00", evening: $("#eve", main).value || "21:00", tz: $("#tz", main).value, push_on: $("#pon", main).checked, budget, categories: cats, updated_at: new Date().toISOString() };
+    const patch = { morning: $("#mor", main).value || "08:00", evening: $("#eve", main).value || "21:00", tz: $("#tz", main).value, push_on: $("#pon", main).checked, weekly_on: $("#won", main).checked, budget, categories: cats, updated_at: new Date().toISOString() };
     // если время перенесли на «сейчас+», разрешить сегодняшнее уведомление ещё раз
     if (patch.morning !== String(st.morning).slice(0, 5)) patch.last_morning = null;
     if (patch.evening !== String(st.evening).slice(0, 5)) patch.last_evening = null;

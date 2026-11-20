@@ -4,7 +4,7 @@ import { $, $$, esc, toast } from "./ui.js";
 import { loginScreen } from "./login.js";
 
 export const S = { uid: null, set: null };
-export const VERSION = "1.0";
+export const VERSION = "1.1";
 
 const TABS = [["today", "☀️", "Сегодня"], ["evening", "🌙", "Вечер"], ["money", "💸", "Деньги"], ["ideas", "💡", "Идеи"], ["more", "☰", "Ещё"]];
 const PAGES = {
@@ -12,8 +12,9 @@ const PAGES = {
   ideas: () => import("./ideas.js"), more: () => import("./more.js"), week: () => import("./week.js"),
   tasks: () => import("./tasks.js"), habits: () => import("./habits.js"), ask: () => import("./ask.js"),
   settings: () => import("./settings.js"), journal: () => import("./journal.js"),
+  search: () => import("./search.js"), siri: () => import("./siri.js"),
 };
-const PARENT = { week: "more", tasks: "more", habits: "more", ask: "more", settings: "more", journal: "more" };
+const PARENT = { week: "more", tasks: "more", habits: "more", ask: "more", settings: "more", journal: "more", search: "more", siri: "more" };
 
 const app = $("#app");
 
@@ -32,6 +33,7 @@ function shell() {
 let renderId = 0;
 async function route() {
   if (!S.uid) return;
+  if (location.hash.startsWith("#/add?")) { const { handleQuick } = await import("./quick.js"); const to = await handleQuick(); location.hash = "#/" + (to || "today"); return; }
   const [name = "today", arg] = location.hash.replace(/^#\/?/, "").split("/");
   const page = PAGES[name] ? name : "today";
   const tab = PARENT[page] || page;

@@ -1,5 +1,5 @@
 // Личный помощник: работа без сети (сначала сеть, при отсутствии — сохранённая копия) и уведомления.
-const CACHE = "pb-v1";
+const CACHE = "pb-v1.1";
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener("fetch", (e) => {

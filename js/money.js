@@ -82,7 +82,7 @@ export async function render(main) {
       return `<div class="bar" data-c="${esc(c)}" style="cursor:pointer;${catF && catF !== c ? "opacity:.45" : ""}"><div class="bl"><span>${icon(c)} ${esc(c)}</span><span><b>${rub(v)}</b>${dd !== null ? ` <span class="small delta ${dd > 0 ? "up" : "down"}">${dd > 0 ? "+" : ""}${dd}%</span>` : ""}</span></div><div class="progress"><i style="width:${(v / max) * 100}%"></i></div></div>`;
     }).join("")}</div>${catF ? `<button class="btn ghost" id="nocat">Показать все категории</button>` : `<p class="hint">Нажмите на категорию, чтобы увидеть её траты</p>`}</div>` : ""}
     <button class="btn wide blue" id="ai">✨ Объяснить траты — Claude</button><div id="aiout" style="margin-top:10px"></div>
-    <h3>Записи${catF ? " · " + esc(catF) : ""}</h3>
+    <div class="row" style="justify-content:space-between;margin:22px 4px 8px"><h3 style="margin:0">Записи${catF ? " · " + esc(catF) : ""}</h3>${vis.length ? `<button class="btn sm" id="csv">⬇️ В таблицу</button>` : ""}</div>
     ${Object.entries(groups).map(([d, r]) => `<div class="small muted" style="margin:12px 4px 6px">${dLong(d)} · ${rub(sum(r))}</div><div class="card flat">${r.map((e) => `<div class="li" data-e="${e.id}"><span class="ic">${icon(e.category)}</span><div class="tx"><div>${esc(e.category)}${e.kind === "рабочее" ? ` <span class="tag work">рабочая</span>` : ""}</div>${e.note ? `<div class="s">${esc(e.note)}</div>` : ""}</div><span class="amount">${rub(e.amount)}</span></div>`).join("")}</div>`).join("") || `<div class="empty">Трат за период нет. Нажмите ＋, чтобы записать.</div>`}
     <button class="fab" id="add" aria-label="Добавить трату">＋</button>`;
 
@@ -94,6 +94,11 @@ export async function render(main) {
   $("#nocat", main) && ($("#nocat", main).onclick = () => { catF = null; re(); });
   $$("[data-e]", main).forEach((r) => (r.onclick = () => expenseSheet(rows.find((e) => e.id === r.dataset.e), re)));
   $("#add", main).onclick = () => expenseSheet(null, re);
+  $("#csv", main) && ($("#csv", main).onclick = () => {
+    const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const csv = String.fromCharCode(0xfeff) + [["Дата", "Сумма", "Категория", "Чья", "Комментарий"], ...vis.map((e) => [e.day.split("-").reverse().join("."), String(+e.amount).replace(".", ","), e.category, e.kind, e.note])].map((r) => r.map(q).join(";")).join(String.fromCharCode(13, 10));
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); a.download = `траты-${from}-${to}.csv`; a.click();
+  });
   $("#ai", main).onclick = (ev) => busy(ev.currentTarget, async () => {
     const j = await fn({ action: "ai", kind: "money", from, to });
     $("#aiout", main).innerHTML = `<div class="ai"><div class="who">Claude · ${dShort(from)}–${dShort(to)}</div>${aiHtml(j.answer)}</div>`;
