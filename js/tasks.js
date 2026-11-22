@@ -65,7 +65,7 @@ export function taskSheet(t0, onChange) {
     <div class="row2"><div><label class="f">Цель</label><select id="tg"><option value="">— без цели —</option>${goals.map((g) => `<option value="${g.id}" ${t.goal_id === g.id ? "selected" : ""}>${esc(g.title)}</option>`).join("")}</select></div>
       <div><label class="f">Сфера</label><select id="ta"><option ${t.area !== "работа" ? "selected" : ""}>личное</option><option value="работа" ${t.area === "работа" ? "selected" : ""}>Тропос / работа</option></select></div></div>
     <label class="f">Заметка или ссылка</label><textarea id="tn" placeholder="Подробности, ссылка на сайт…">${esc(t.note)}</textarea>${DICT}
-    <button class="btn pri wide" id="ts" style="margin-top:12px">${isNew ? "Добавить" : "Сохранить"}</button>
+    <div class="row" style="margin-top:12px"><button class="btn" data-close>Отмена</button><button class="btn pri grow" id="ts">${isNew ? "Добавить" : "Сохранить"}</button></div>
     ${isNew ? "" : `<div class="row2"><button class="btn" id="tmv">↪ Перенести</button><button class="btn danger" id="tx">Удалить</button></div>
       ${t.moves ? `<p class="hint">Переносилась ${t.moves} раз. <a href="#" id="hist">История</a></p>` : ""}`}`);
   const el = s.el;
@@ -129,9 +129,9 @@ export function render(main) {
   const doneRecent = rows("pb_tasks").filter((t) => t.done_at).sort((a, b) => String(b.done_at).localeCompare(String(a.done_at))).slice(0, 30);
   main.innerHTML = `<div class="cap" style="margin-top:6px">Задачи · ${show === "matrix" ? "матрица" : show === "list" ? "список" : "сделано"}</div><h1>Что важно, что срочно</h1><p class="voice">${voice}</p>
     <div class="seg" id="sh" style="margin-bottom:10px">${[["matrix", "Матрица"], ["list", "По сроку"], ["done", "Сделано"]].map(([k, l]) => `<button data-s="${k}" class="${show === k ? "on" : ""}">${l}</button>`).join("")}</div>
-    ${show === "matrix" ? `<div class="mx">${[1, 2, 3, 4].map((k) => `<div class="q ${QUAD[k].cls}" data-q="${k}"><div class="qh"><span>${QUAD[k].t}</span><b>${Q[k].length}</b></div>
-      ${Q[k].map((t) => `<div class="qi" data-id="${t.id}"><button class="ck" aria-label="Готово"></button><div><div class="tt">${esc(t.title)}</div><div class="s${t.day && t.day < td ? " late" : ""}">${esc(deadline(t, td))}${t.goal_id ? " · цель: " + esc(goalName(t.goal_id).toLowerCase()) : ""}</div></div></div>`).join("") || `<div class="s dim" style="font-size:11px;padding:6px 0">${QUAD[k].s}</div>`}</div>`).join("")}</div>
-      <p class="hint center">Внутри квадранта — по сроку: что наступит раньше, то выше. Удерживайте задачу и перетащите, если не согласны с квадрантом.</p>`
+    ${show === "matrix" ? `<div class="mx">${[1, 2, 3, 4].map((k) => `<div class="q ${QUAD[k].cls}" data-q="${k}"><div class="qh"><span>${QUAD[k].t}</span><b>${Q[k].length}</b></div><div class="qs">
+      ${Q[k].map((t) => `<div class="qi" data-id="${t.id}"><button class="ck" aria-label="Готово"></button><div><div class="tt">${esc(t.title)}</div><div class="s${t.day && t.day < td ? " late" : ""}">${esc(deadline(t, td))}${t.goal_id ? " · цель: " + esc(goalName(t.goal_id).toLowerCase()) : ""}</div></div></div>`).join("") || `<div class="s dim" style="font-size:11px;padding:6px 0">${QUAD[k].s}</div>`}</div><div class="more">листайте →</div></div>`).join("")}</div>
+      <p class="hint center">Внутри квадранта — по сроку: что наступит раньше, то выше. Много задач — листайте квадрант пальцем вправо. Удерживайте задачу, чтобы перетащить в другой квадрант.</p>`
     : show === "list" ? `<div class="card flat">${[...open].sort(byDeadline).map((t) => taskRow(t, td)).join("") || `<div class="empty">Открытых задач нет</div>`}</div>`
     : `<div class="card flat">${doneRecent.map((t) => taskRow(t, td)).join("") || `<div class="empty">Пока ничего</div>`}</div>`}
     <button class="fab" id="add" aria-label="Новая задача">＋</button>`;
@@ -139,6 +139,8 @@ export function render(main) {
   $$("#sh button", main).forEach((b) => (b.onclick = () => { show = b.dataset.s; re(); }));
   $("#add", main).onclick = () => taskSheet({}, re);
   bindTasks(main, re);
+  // подпись «листайте →», пока справа есть ещё задачи
+  $$(".qs", main).forEach((qs) => { const upd = () => qs.parentElement.classList.toggle("has-more", qs.scrollWidth - qs.clientWidth - qs.scrollLeft > 8); upd(); qs.addEventListener("scroll", upd, { passive: true }); });
   $$(".qi", main).forEach((el) => {
     const t = () => rows("pb_tasks").find((x) => x.id === el.dataset.id);
     $(".ck", el).onclick = (e) => { e.stopPropagation(); el.style.opacity = ".4"; toggleDone(t()); setTimeout(re, 250); };

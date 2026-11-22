@@ -48,12 +48,12 @@ export function openVoice(onDone) {
     <textarea id="vt" placeholder="Говорите: «завтра оплатить аренду сорок пять тысяч»" style="font:italic 17px/1.35 var(--serif);text-align:center;min-height:84px;background:transparent;border:1px solid var(--line2)"></textarea>
     <div class="pv" id="pv"></div>
     <div class="chips" id="vtype" style="justify-content:center"></div>
-    <div class="row" style="margin-top:12px"><button class="btn grow" id="vmic">■ Готово</button><button class="btn pri grow" id="vs">Сохранить</button></div>
+    <div class="row" style="margin-top:12px"><button class="btn" data-close>Отмена</button><button class="btn grow" id="vmic">■ Готово</button><button class="btn pri grow" id="vs">Сохранить</button></div>
     <p class="hint center" id="vhint">Не уверен — положу во «Входящие», там выберете тип одним касанием.</p>`, { onClose: () => { stop(); onDone && onDone(); } });
   const el = s.el, ta = $("#vt", el);
   const ui = (on) => { listening = on; el.classList.toggle("listening", on); $("#vlab", el).textContent = on ? "Слушаю" : ta.value.trim() ? "Записано" : "Нажмите «Говорить»"; $("#vmic", el).textContent = on ? "■ Готово" : "🎙 Говорить"; $("#wave", el).style.visibility = on ? "visible" : "hidden"; };
-  const keyboard = (msg) => { ui(false); $("#vhint", el).textContent = msg || "Нажмите 🎤 на клавиатуре iPhone и говорите."; ta.focus(); };
-  function stop() { try { rec && rec.stop(); } catch (e) {} rec = null; }
+  const keyboard = (msg) => { ui(false); $("#vlab", el).textContent = "Продиктуйте клавиатурой"; $("#vhint", el).textContent = (msg ? msg + " " : "") + "Нажмите на поле выше, затем 🎤 на клавиатуре iPhone."; };
+  function stop() { const r = rec; rec = null; try { r && r.stop(); } catch (e) {} if (listening) { ui(false); draw(); } }
   function start() {
     if (!SR || srBroken) return keyboard(SR ? "Распознавание iPhone недоступно — диктуйте микрофоном клавиатуры 🎤." : "");
     try {
@@ -64,8 +64,12 @@ export function openVoice(onDone) {
         if (e.error === "not-allowed" || e.error === "service-not-allowed") { srBroken = true; keyboard("Нет доступа к микрофону или распознаванию. Разрешите: Настройки iPhone → Конфиденциальность → Распознавание речи и Микрофон. Пока — диктуйте клавиатурой 🎤."); }
         else if (e.error !== "no-speech" && e.error !== "aborted") keyboard("Не расслышал — повторите или продиктуйте клавиатурой 🎤.");
       };
-      rec.onend = () => { rec = null; ui(false); draw(); };
+      rec.onend = () => { rec = null; if (listening) { ui(false); draw(); } };
+      let started = false;
+      rec.onstart = () => (started = true);
       rec.start(); ui(true);
+      // на некоторых iPhone распознавание молча не запускается — тогда сразу клавиатура
+      setTimeout(() => { if (!started && rec) { stop(); srBroken = true; keyboard("Распознавание iPhone не запустилось."); } }, 3000);
     } catch (e) { srBroken = true; keyboard(); }
   }
   const draw = () => {

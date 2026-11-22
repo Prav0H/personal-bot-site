@@ -34,7 +34,11 @@ export function sheet(html, { onClose } = {}) {
   document.body.append(wrap);
   requestAnimationFrame(() => wrap.classList.add("open"));
   let closed = false;
-  const close = () => { if (closed) return; closed = true; document.activeElement?.blur?.(); wrap.classList.remove("open"); setTimeout(() => wrap.remove(), 220); onClose && onClose(); };
+  // Шторка всегда в видимой части экрана: когда открыта клавиатура iPhone — над ней, а не под ней
+  const vv = window.visualViewport;
+  const fit = () => { if (!vv) return; wrap.style.top = vv.offsetTop + "px"; wrap.style.height = vv.height + "px"; wrap.style.bottom = "auto"; wrap.classList.toggle("kb", vv.height < window.innerHeight - 120); };
+  if (vv) { vv.addEventListener("resize", fit); vv.addEventListener("scroll", fit); fit(); }
+  const close = () => { if (closed) return; closed = true; document.activeElement?.blur?.(); if (vv) { vv.removeEventListener("resize", fit); vv.removeEventListener("scroll", fit); } wrap.classList.remove("open"); setTimeout(() => wrap.remove(), 220); onClose && onClose(); };
   wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
   // смахнуть вниз за верхнюю часть шторки — закрыть
   const sh = wrap.firstElementChild; let y0 = null, dy = 0;
