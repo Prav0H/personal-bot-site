@@ -37,7 +37,9 @@ export function guessText(p) {
 }
 
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let srBroken = false; // распознавание iPhone недоступно — дальше сразу микрофон клавиатуры
+let srBroken = false; // распознавание запрещено в настройках iPhone — дальше сразу микрофон клавиатуры
+let active = null;    // единственная запись на всё приложение
+const IOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
 
 export function openVoice(onDone) {
   let chosen = null, rec = null, listening = false, finalText = "";
@@ -53,24 +55,36 @@ export function openVoice(onDone) {
   const el = s.el, ta = $("#vt", el);
   const ui = (on) => { listening = on; el.classList.toggle("listening", on); $("#vlab", el).textContent = on ? "Слушаю" : ta.value.trim() ? "Записано" : "Нажмите «Говорить»"; $("#vmic", el).textContent = on ? "■ Готово" : "🎙 Говорить"; $("#wave", el).style.visibility = on ? "visible" : "hidden"; };
   const keyboard = (msg) => { ui(false); $("#vlab", el).textContent = "Продиктуйте клавиатурой"; $("#vhint", el).textContent = (msg ? msg + " " : "") + "Нажмите на поле выше, затем 🎤 на клавиатуре iPhone."; };
-  function stop() { const r = rec; rec = null; try { r && r.stop(); } catch (e) {} if (listening) { ui(false); draw(); } }
+  // iPhone слушает короткими отрезками и обрывает запись на паузе. Поэтому: пока человек не нажал «Готово»,
+  // запись перезапускается сама (до ~40 с), текст копится; прошлую запись всегда закрываем до новой.
+  let userStop = false, restarts = 0, until = 0, gotText = false;
+  function stop() { userStop = true; const r = rec; rec = null; try { r && (gotText ? r.stop() : r.abort()); } catch (e) {} if (listening) { ui(false); draw(); } }
+  function launch() {
+    try { active && active.abort(); } catch (e) {}
+    const r = new SR(); rec = r; active = r;
+    r.lang = "ru-RU"; r.interimResults = true; r.continuous = !IOS; r.maxAlternatives = 1;
+    let started = false, base = finalText;
+    r.onstart = () => (started = true);
+    r.onresult = (e) => { let fin = "", tmp = ""; for (let i = 0; i < e.results.length; i++) { const x = e.results[i]; if (x.isFinal) fin += x[0].transcript; else tmp += x[0].transcript; } finalText = (base + " " + fin).trim(); ta.value = (finalText + " " + tmp).trim(); if (ta.value) gotText = true; draw(); };
+    r.onerror = (e) => {
+      if ((e.error === "not-allowed" || e.error === "service-not-allowed") && restarts > 0) { userStop = true; return; } // авто-продолжение запрещено — просто заканчиваем
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") { userStop = true; srBroken = true; keyboard("Нет доступа к микрофону или распознаванию. Разрешите: Настройки iPhone → Конфиденциальность → Распознавание речи и Микрофон. Пока — диктуйте клавиатурой 🎤."); }
+    };
+    r.onend = () => {
+      if (rec !== r) return;
+      rec = null;
+      if (!userStop && Date.now() < until && restarts < 12) { restarts++; setTimeout(() => { if (!userStop) launch(); }, 120); return; } // пауза — слушаем дальше
+      if (listening) { ui(false); draw(); if (!gotText) $("#vhint", el).textContent = "Не расслышал. Нажмите «Говорить» и скажите ещё раз — или продиктуйте клавиатурой 🎤."; }
+    };
+    r.start();
+    setTimeout(() => { if (!started && rec === r && !gotText) { try { r.abort(); } catch (e) {} rec = null; if (!userStop) keyboard("Распознавание не запустилось — нажмите «Говорить» ещё раз или продиктуйте клавиатурой."); } }, 3500);
+  }
   function start() {
-    if (!SR || srBroken) return keyboard(SR ? "Распознавание iPhone недоступно — диктуйте микрофоном клавиатуры 🎤." : "");
-    try {
-      rec = new SR(); rec.lang = "ru-RU"; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
-      finalText = ta.value.trim() ? ta.value.trim() + " " : "";
-      rec.onresult = (e) => { let fin = "", tmp = ""; for (let i = e.resultIndex; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) fin += r[0].transcript; else tmp += r[0].transcript; } finalText += fin; ta.value = (finalText + tmp).trim(); draw(); };
-      rec.onerror = (e) => {
-        if (e.error === "not-allowed" || e.error === "service-not-allowed") { srBroken = true; keyboard("Нет доступа к микрофону или распознаванию. Разрешите: Настройки iPhone → Конфиденциальность → Распознавание речи и Микрофон. Пока — диктуйте клавиатурой 🎤."); }
-        else if (e.error !== "no-speech" && e.error !== "aborted") keyboard("Не расслышал — повторите или продиктуйте клавиатурой 🎤.");
-      };
-      rec.onend = () => { rec = null; if (listening) { ui(false); draw(); } };
-      let started = false;
-      rec.onstart = () => (started = true);
-      rec.start(); ui(true);
-      // на некоторых iPhone распознавание молча не запускается — тогда сразу клавиатура
-      setTimeout(() => { if (!started && rec) { stop(); srBroken = true; keyboard("Распознавание iPhone не запустилось."); } }, 3000);
-    } catch (e) { srBroken = true; keyboard(); }
+    if (!SR) return keyboard();
+    if (srBroken) return keyboard("Распознавание iPhone недоступно — диктуйте микрофоном клавиатуры 🎤.");
+    userStop = false; restarts = 0; until = Date.now() + 40e3;
+    finalText = ta.value.trim();
+    try { ui(true); launch(); } catch (e) { keyboard(); }
   }
   const draw = () => {
     const v = ta.value.trim();
