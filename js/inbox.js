@@ -2,7 +2,7 @@
 import { rows, remove } from "./store.js";
 import { $, $$, esc, toast } from "./ui.js";
 import { TYPE_LABEL, parse } from "./parse.js";
-import { commit, guessText } from "./voice.js";
+import { commit, guessText, goalsList } from "./voice.js";
 import { cats } from "./model.js";
 import { learnType } from "./assistant.js";
 
@@ -14,7 +14,7 @@ export function render(main) {
   main.innerHTML = `<a class="back" href="#/today">‹ Сегодня</a><div class="cap" style="margin-top:2px">Входящие · ${items.length}</div>
     <h1>${items.length ? "Разбери, что я не понял" : "Всё разобрано"}</h1><p class="voice">${items.length ? "Остальное разложил сам. Выбери тип — или поправь мой вариант." : "Когда я не уверен, что вы сказали, фраза попадает сюда."}</p>
     ${items.map((it) => {
-      const g = it.guess && it.guess.type ? it.guess : parse(it.text, cats());
+      const g = it.guess && it.guess.type ? it.guess : parse(it.text, cats(), null, goalsList());
       const types = ORDER[g.type] || ["task", "idea", "expense"];
       if (g.amount && !types.includes("expense")) types.push("expense");
       sel[it.id] = types[0];
@@ -24,7 +24,7 @@ export function render(main) {
     ${items.length ? `<button class="btn pri wide" id="all">Разобрать всё</button><p class="hint center">Нажатие на тип сразу сохраняет запись. «Разобрать всё» — принять мои варианты.</p>` : ""}`;
   const re = () => render(main);
   const apply = (it, type) => {
-    const g = it.guess && it.guess.type ? it.guess : parse(it.text, cats());
+    const g = it.guess && it.guess.type ? it.guess : parse(it.text, cats(), null, goalsList());
     try { const msg = commit(g, type); learnType(g.title || it.text, type); remove("pb_inbox", it.id); return msg; } catch (e) { toast(e.message, true); return null; }
   };
   $$("[data-i]", main).forEach((c) => {

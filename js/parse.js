@@ -91,8 +91,38 @@ const words = (low) => low.split(/[^а-яёa-z0-9]+/).filter((w) => w.length >= 
 function learnedType(low, hints) { if (!hints?.types) return null; for (const w of words(low)) if (hints.types[w]) return hints.types[w]; return null; }
 function learnedCategory(low, hints) { if (!hints?.cats) return null; for (const w of words(low)) if (hints.cats[w]) return hints.cats[w]; return null; }
 
-/** Главная функция разбора. hints — выученные слова (см. assistant.js). */
-export function parse(raw, cats = [], hints = null) {
+/** «… в проект обучение кайроса …», «по цели переезд …» → цель (проект) по словам названия. */
+const GOAL_W = /(^|\s)(в|во|для|по|к)?\s*(проект[уеаы]?|цел[иьяю])(\s|$)/i;
+export function findGoal(text, goals) {
+  if (!goals || !goals.length || !GOAL_W.test(text)) return null;
+  const low = text.toLowerCase().replace(/ё/g, "е");
+  let best = null;
+  for (const g of goals) {
+    const hit = [];
+    for (const w of String(g.title).toLowerCase().replace(/ё/g, "е").split(/[^а-яa-z0-9]+/).filter((x) => x.length >= 4)) {
+      const m = low.match(new RegExp("[а-яa-z]*" + w.slice(0, Math.max(4, w.length - 2)) + "[а-яa-z]*"));
+      if (m) hit.push(m[0]);
+    }
+    if (hit.length && (!best || hit.length > best.hit.length)) best = { goal: g, hit };
+  }
+  return best;
+}
+
+/** Главная функция разбора. hints — выученные слова (см. assistant.js), goals — [{id, title}] для «в проект …». */
+export function parse(raw, cats = [], hints = null, goals = null) {
+  const gm = findGoal(raw, goals);
+  if (gm) { // убрать «в проект» и идущие сразу за ним слова названия; остальное — текст задачи
+    const m = raw.match(GOAL_W), at = m.index + m[0].length;
+    const after = raw.slice(at).split(/\s+/), hits = gm.hit.map((h) => h.toLowerCase());
+    let k = 0; while (k < after.length && hits.includes(after[k].toLowerCase().replace(/ё/g, "е").replace(/[,.:]$/, ""))) k++;
+    raw = (raw.slice(0, m.index) + " " + after.slice(k).join(" ")).replace(/\s+/g, " ").trim();
+  }
+  const res = parseText(raw, cats, hints);
+  if (gm) { res.goal_id = gm.goal.id; res.goal = gm.goal.title; if (res.type === "task") res.important = true; }
+  return res;
+}
+
+function parseText(raw, cats = [], hints = null) {
   const text = raw.trim().replace(/^(кайрос|кайроса|эй|слушай)[,.!\s]+/i, "").replace(/^(кстати|так|пожалуйста)[,.\s]+/i, "")
     .replace(/^(добавь|добавить|добавьте|запиши|записать|запишите|создай|создать|поставь|поставить|внеси|внести|сохрани|сохранить|запомни|отметь|занеси|напомни|напомнить)[,.\s]+(мне\s+|пожалуйста\s+|новую\s+|новый\s+|новое\s+)?/i, "")
     .replace(/^встречу(?=\s)/i, "встреча");
