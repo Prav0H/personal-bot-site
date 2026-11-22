@@ -43,11 +43,11 @@ function route(keepScroll) {
   const page = PAGES[name] ? name : "today";
   $$(".tabs a").forEach((a) => a.classList.toggle("on", a.dataset.tab === (TAB[page] || page)));
   const main = $("#main"), key = page + "/" + (arg || "");
-  const y = keepScroll === true && key === current ? window.scrollY : 0;
+  const y = keepScroll === true && key === current ? main.scrollTop : 0;
   current = key;
   try { PAGES[page].render(main, arg ? decodeURIComponent(arg) : undefined); }
   catch (e) { console.error(e); main.innerHTML = `<div class="card"><h2>Что-то пошло не так</h2><p class="muted">${esc(e.message)}</p><button class="btn wide" onclick="location.reload()">Обновить</button></div>`; }
-  window.scrollTo(0, y);
+  main.scrollTop = y;
 }
 export const refresh = () => route(true);
 
@@ -80,4 +80,6 @@ async function boot() {
 }
 
 window.addEventListener("hashchange", () => route());
+// iPhone после закрытия клавиатуры иногда оставляет страницу сдвинутой вверх — возвращаем на место
+document.addEventListener("focusout", () => setTimeout(() => { if (!["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) window.scrollTo(0, 0); }, 60));
 boot();

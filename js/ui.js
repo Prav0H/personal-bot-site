@@ -30,11 +30,19 @@ export function toast(msg, bad = false) {
 export function sheet(html, { onClose } = {}) {
   const wrap = document.createElement("div");
   wrap.className = "sheet-wrap";
-  wrap.innerHTML = `<div class="sheet" role="dialog"><div class="grip"></div>${html}</div>`;
+  wrap.innerHTML = `<div class="sheet" role="dialog"><button class="x" aria-label="Закрыть" data-close>✕</button><div class="grip"></div>${html}</div>`;
   document.body.append(wrap);
   requestAnimationFrame(() => wrap.classList.add("open"));
-  const close = () => { wrap.classList.remove("open"); setTimeout(() => wrap.remove(), 220); onClose && onClose(); };
+  let closed = false;
+  const close = () => { if (closed) return; closed = true; document.activeElement?.blur?.(); wrap.classList.remove("open"); setTimeout(() => wrap.remove(), 220); onClose && onClose(); };
   wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+  // смахнуть вниз за верхнюю часть шторки — закрыть
+  const sh = wrap.firstElementChild; let y0 = null, dy = 0;
+  sh.addEventListener("touchstart", (e) => { y0 = sh.scrollTop <= 0 && e.touches[0].clientY - sh.getBoundingClientRect().top < 70 ? e.touches[0].clientY : null; dy = 0; }, { passive: true });
+  sh.addEventListener("touchmove", (e) => { if (y0 == null) return; dy = Math.max(0, e.touches[0].clientY - y0); sh.style.transform = `translateY(${dy}px)`; }, { passive: true });
+  sh.addEventListener("touchend", () => { if (y0 == null) return; sh.style.transform = ""; if (dy > 80) close(); y0 = null; });
+  const esc = (e) => { if (e.key === "Escape") { close(); removeEventListener("keydown", esc); } };
+  addEventListener("keydown", esc);
   $$("[data-close]", wrap).forEach((b) => (b.onclick = close));
   return { el: $(".sheet", wrap), close };
 }
