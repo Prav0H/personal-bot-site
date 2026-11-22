@@ -32,8 +32,12 @@ export async function init(user) {
   if (fresh) await p; // первый запуск на устройстве — дождаться данных
   if (!rows("pb_settings").length) put("pb_settings", { user_id: uid });
   addEventListener("online", () => flush());
-  document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - lastSync > 60e3) sync(); });
-  setInterval(() => Q.length && flush(), 20e3);
+  // вернулись в приложение (например, после записи через Siri) — сразу свежие данные; пока открыто — раз в 30 с
+  const pull = () => { if (!document.hidden && Date.now() - lastSync > 3e3) sync(); };
+  document.addEventListener("visibilitychange", pull);
+  addEventListener("focus", pull);
+  addEventListener("pageshow", pull);
+  setInterval(() => { if (Q.length) flush(); if (!document.hidden && Date.now() - lastSync > 30e3) sync(); }, 10e3);
 }
 
 /** Скачать всё из базы и наложить ещё не отправленные изменения. */
