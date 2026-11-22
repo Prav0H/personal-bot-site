@@ -66,7 +66,12 @@ export function openVoice(onDone) {
     const r = active; rec = r;
     if (r._on) { try { r.abort(); } catch (e) {} let w = 0; const wait = () => { if (!r._on || ++w > 15) { r._on = false; if (!userStop) launch(); } else setTimeout(wait, 100); }; setTimeout(wait, 100); return; }
     let started = false, base = finalText;
-    r.onstart = () => { started = true; r._on = true; };
+    r.onstart = () => {
+      started = true; r._on = true;
+      // запись «идёт», но слов нет — так iPhone иногда ведёт себя со второго раза: не делаем вид, что слушаем
+      const t0 = Date.now();
+      setTimeout(() => { if (rec === r && !gotText && !userStop && Date.now() - t0 >= 7900) { stop(); keyboard("iPhone не передал звук. Нажмите «Говорить» ещё раз — или продиктуйте клавиатурой. Надёжнее всего — Siri: Ещё → Siri."); } }, 8000);
+    };
     r.onresult = (e) => { let fin = "", tmp = ""; for (let i = 0; i < e.results.length; i++) { const x = e.results[i]; if (x.isFinal) fin += x[0].transcript; else tmp += x[0].transcript; } finalText = (base + " " + fin).trim(); ta.value = (finalText + " " + tmp).trim(); if (ta.value) gotText = true; draw(); };
     r.onerror = (e) => {
       if ((e.error === "not-allowed" || e.error === "service-not-allowed") && restarts > 0) { userStop = true; return; } // авто-продолжение запрещено — просто заканчиваем

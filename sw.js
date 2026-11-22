@@ -1,6 +1,6 @@
 // Кайрос: файлы приложения хранятся на телефоне — запуск мгновенный и без интернета.
 // Версия меняется при каждой выкладке (tools/site.py) → телефон скачивает новые файлы один раз.
-const CACHE = "kairos-9654165";
+const CACHE = "kairos-cb9c89e";
 const ASSETS = ["./", "index.html", "manifest.webmanifest", "css/app.css", "js/ask.js", "js/calendar.js", "js/db.js", "js/evening.js", "js/goals.js", "js/habits.js", "js/ideas.js", "js/inbox.js", "js/journal.js", "js/login.js", "js/main.js", "js/model.js", "js/money.js", "js/more.js", "js/parse.js", "js/quick.js", "js/review.js", "js/search.js", "js/settings.js", "js/siri.js", "js/store.js", "js/tasks.js", "js/today.js", "js/ui.js", "js/voice.js", "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"];
 const CDN = /^(cdn\.jsdelivr\.net|fonts\.googleapis\.com|fonts\.gstatic\.com)$/;
 self.addEventListener("install", (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS.map((a) => new Request(a, { cache: "reload" })))).then(() => self.skipWaiting())));
