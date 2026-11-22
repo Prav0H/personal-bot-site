@@ -3,6 +3,7 @@ import { rows, add, patch, remove, settings, setSettings } from "./store.js";
 import { today, addDays, dayDiff, fn } from "./db.js";
 import { $, $$, esc, toast, sheet, confirmBox, rub, dShort, dRel, busy, aiHtml } from "./ui.js";
 import { cats, sum, balanceNow } from "./model.js";
+import { learnCategory } from "./assistant.js";
 
 const MONTH = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
 
@@ -29,6 +30,7 @@ export function expenseSheet(e0, onChange) {
     if (!(amount > 0)) return toast("Введите сумму", true);
     const row = { amount, title: $("#ti", el).value.trim(), note: "", category: cat, kind: $("#ek", el).value, day: $("#ed", el).value || td, planned: $("#ep", el).checked, goal_id: cat === "Целевые" ? $("#eg", el).value || null : null };
     if (isNew) add("pb_expenses", row); else patch("pb_expenses", e.id, row);
+    if (!isNew && e.category && row.category !== e.category && row.title) learnCategory(row.title, row.category); // исправили категорию — запомнить
     s.close(); toast(row.planned ? `Платёж запланирован: ${rub(amount)}` : `Записано: ${rub(amount)}`); onChange && onChange();
   };
   if (!isNew) {

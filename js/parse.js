@@ -83,9 +83,17 @@ const SPEND = /потратил|заплатил|оплатил|купил|ст�
 const TASK = /^(позвонить|написать|сделать|купить|оплатить|отправить|подготовить|найти|выбрать|забрать|записаться|посчитать|собрать|встретиться|проверить|ответить|созвониться|заказать|сходить|съездить|починить|закрыть|отдать|узнать|обсудить)/;
 const EVENT = /встреча|созвон|звонок|приём|прием|день рождения|свадьба|концерт|вылет|рейс/;
 
-/** Главная функция разбора. */
-export function parse(raw, cats = []) {
-  const text = raw.trim().replace(/^(кстати|так|запиши|запомни|напомни)[, ]+/i, "");
+const KW_TYPE = { "расход|трат|потратил|заплатил|оплатил|купил": "expense", "задач|дело|надо|нужно|не забыть": "task", "иде[яю]|мысль": "idea", "привычк": "habit", "встреч|событи|созвон": "event" };
+const KEYWORD = new RegExp("^(" + Object.keys(KW_TYPE).join("|") + ")[а-яё]*", "i");
+
+/** Выученное из исправлений: слово фразы → тип или категория (пополняется, когда вы меняете тип/категорию). */
+const words = (low) => low.split(/[^а-яёa-z0-9]+/).filter((w) => w.length >= 3);
+function learnedType(low, hints) { if (!hints?.types) return null; for (const w of words(low)) if (hints.types[w]) return hints.types[w]; return null; }
+function learnedCategory(low, hints) { if (!hints?.cats) return null; for (const w of words(low)) if (hints.cats[w]) return hints.cats[w]; return null; }
+
+/** Главная функция разбора. hints — выученные слова (см. assistant.js). */
+export function parse(raw, cats = [], hints = null) {
+  const text = raw.trim().replace(/^(кайрос|кайроса|эй|слушай)[,.!\s]+/i, "").replace(/^(кстати|так|запиши|запомни|напомни|пожалуйста)[,.\s]+/i, "");
   const low = text.toLowerCase().replace(/ё/g, "е");
   const date = findDate(text), time = findTime(text);
   const escRe = (m) => new RegExp(m.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
@@ -96,7 +104,15 @@ export function parse(raw, cats = []) {
   const remind = /напомни/.test(raw.toLowerCase());
   let type = "task", confident = false, why = "";
   const startsVerb = TASK.test(low.replace(/^(завтра|сегодня|послезавтра) /, ""));
-  if (IDEA.test(low)) { type = "idea"; confident = true; }
+  // Ключевое слово в начале фразы — главный признак: «расход …», «задача …», «идея …», «привычка …», «встреча …»
+  const kw = low.match(KEYWORD);
+  const learned = learnedType(low, hints);
+  if (kw || learned) {
+    type = kw ? KW_TYPE[Object.keys(KW_TYPE).find((k) => new RegExp("^(" + k + ")").test(kw[1]))] : learned;
+    confident = type !== "expense" || !!(amount && amount.amount > 0);
+    if (!confident) why = "расход без суммы";
+  }
+  else if (IDEA.test(low)) { type = "idea"; confident = true; }
   else if (HABIT.test(low)) { type = "habit"; confident = !amount; why = "похоже на привычку"; }
   else if (amount && amount.amount > 0 && !startsVerb && (SPEND.test(low) || (guessCategory(low, cats) !== "Прочее" && rest.trim().split(/\s+/).length <= 4))) { type = "expense"; confident = true; }
   else if (amount && amount.amount > 0 && startsVerb && /оплатить|заплатить|перевести/.test(low)) { type = "expense"; confident = true; why = "платёж"; }
@@ -107,6 +123,8 @@ export function parse(raw, cats = []) {
   // Заголовок без служебных слов
   let title = text;
   for (const m of [date?.match, time?.match, type === "expense" ? amount?.match : null]) if (m) title = title.replace(new RegExp(m.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"), " ");
+  if (kw && type !== "event") title = title.replace(new RegExp("^\\s*" + kw[0] + "[:,.\\s—-]*", "i"), "");
+  title = title.replace(/^\s*(надо|нужно|не забыть)\s+/i, "").replace(/^\s*(на|за)\s+/i, "").replace(/\s+(на|за|в)\s*$/i, "");
   if (type === "idea") title = title.replace(/^(иде[яю]|мысль)[:,\s—-]*/i, "");
   title = title.replace(/(^|\s)(срочно|важно|обязательно)(?=\s|$|[,.])/gi, " ").replace(/\s*(руб(лей|ля|ль)?|р\.|₽)\s*/gi, " ").replace(/\s+/g, " ").replace(/^[\s,—-]+|[\s,—-]+$/g, "");
   title = title.charAt(0).toUpperCase() + title.slice(1);
@@ -116,7 +134,7 @@ export function parse(raw, cats = []) {
   const habitDays = /по будням/.test(low) ? [1, 2, 3, 4, 5] : [1, 2, 3, 4, 5, 6, 0];
   return {
     type, confident, why, text: raw.trim(), title: title || raw.trim(),
-    amount: amount?.amount || null, category: type === "expense" ? guessCategory(low, cats) : null,
+    amount: amount?.amount || null, category: type === "expense" ? learnedCategory(low, hints) || guessCategory(low, cats) : null,
     planned: type === "expense" && date && date.day > td,
     day: date ? date.day : type === "task" ? td : type === "expense" ? td : null, deadline: !!date?.deadline,
     time: time?.time || "", important, urgent: urgent || (type === "task" && !!date && soon), remind,

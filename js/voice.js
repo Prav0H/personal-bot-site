@@ -4,6 +4,7 @@ import { add, rows } from "./store.js";
 import { today } from "./db.js";
 import { $, $$, esc, toast, sheet, rub, dRel } from "./ui.js";
 import { parse, TYPE_LABEL } from "./parse.js";
+import { hints, learnType } from "./assistant.js";
 import { cats, remindAt, QUAD, quad } from "./model.js";
 
 /** Создать запись по разбору. Возвращает подпись для подтверждения. */
@@ -62,7 +63,7 @@ export function openVoice(onDone) {
   function launch() {
     try { active && active.abort(); } catch (e) {}
     const r = new SR(); rec = r; active = r;
-    r.lang = "ru-RU"; r.interimResults = true; r.continuous = !IOS; r.maxAlternatives = 1;
+    r.lang = "ru-RU"; r.interimResults = true; r.continuous = true; r.maxAlternatives = 1; // continuous: не обрывать на паузе (где поддерживается)
     let started = false, base = finalText;
     r.onstart = () => (started = true);
     r.onresult = (e) => { let fin = "", tmp = ""; for (let i = 0; i < e.results.length; i++) { const x = e.results[i]; if (x.isFinal) fin += x[0].transcript; else tmp += x[0].transcript; } finalText = (base + " " + fin).trim(); ta.value = (finalText + " " + tmp).trim(); if (ta.value) gotText = true; draw(); };
@@ -89,7 +90,7 @@ export function openVoice(onDone) {
   const draw = () => {
     const v = ta.value.trim();
     if (!v) { $("#pv", el).innerHTML = ""; $("#vtype", el).innerHTML = ""; return; }
-    const p = parse(v, cats()), type = chosen || p.type;
+    const p = parse(v, cats(), hints()), type = chosen || p.type;
     const bits = [`<span class="tag ${type === "expense" ? "terra" : "gold"}">${TYPE_LABEL[type]}</span>`];
     if (type === "expense" && p.amount) bits.push(`<span class="chip">${rub(p.amount)}</span>`, `<span class="chip">${esc(p.category)}</span>`);
     if (p.day && type !== "idea" && type !== "habit") bits.push(`<span class="chip">${dRel(p.day, today())}</span>`);
@@ -106,10 +107,10 @@ export function openVoice(onDone) {
   $("#vs", el).onclick = () => {
     stop();
     const v = ta.value.trim(); if (!v) return toast("Скажите или напишите что-нибудь", true);
-    const p = parse(v, cats());
+    const p = parse(v, cats(), hints());
     try {
       if (!chosen && !p.confident) { toInbox(p); toast("Положил во «Входящие» — разберёте одним касанием"); }
-      else toast(commit(p, chosen || p.type));
+      else { if (chosen && chosen !== p.type) learnType(p.title, chosen); toast(commit(p, chosen || p.type)); }
       s.close();
     } catch (e) { toast(e.message, true); }
   };

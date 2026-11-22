@@ -4,6 +4,7 @@ import { $, $$, esc, toast } from "./ui.js";
 import { TYPE_LABEL, parse } from "./parse.js";
 import { commit, guessText } from "./voice.js";
 import { cats } from "./model.js";
+import { learnType } from "./assistant.js";
 
 const ORDER = { task: ["task", "expense", "idea"], expense: ["expense", "task"], idea: ["idea", "habit", "task"], habit: ["habit", "task", "idea"], event: ["event", "task"] };
 
@@ -24,7 +25,7 @@ export function render(main) {
   const re = () => render(main);
   const apply = (it, type) => {
     const g = it.guess && it.guess.type ? it.guess : parse(it.text, cats());
-    try { const msg = commit(g, type); remove("pb_inbox", it.id); return msg; } catch (e) { toast(e.message, true); return null; }
+    try { const msg = commit(g, type); learnType(g.title || it.text, type); remove("pb_inbox", it.id); return msg; } catch (e) { toast(e.message, true); return null; }
   };
   $$("[data-i]", main).forEach((c) => {
     const it = items.find((x) => x.id === c.dataset.i);
