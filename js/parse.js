@@ -93,7 +93,9 @@ function learnedCategory(low, hints) { if (!hints?.cats) return null; for (const
 
 /** Главная функция разбора. hints — выученные слова (см. assistant.js). */
 export function parse(raw, cats = [], hints = null) {
-  const text = raw.trim().replace(/^(кайрос|кайроса|эй|слушай)[,.!\s]+/i, "").replace(/^(кстати|так|запиши|запомни|напомни|пожалуйста)[,.\s]+/i, "");
+  const text = raw.trim().replace(/^(кайрос|кайроса|эй|слушай)[,.!\s]+/i, "").replace(/^(кстати|так|пожалуйста)[,.\s]+/i, "")
+    .replace(/^(добавь|добавить|добавьте|запиши|записать|запишите|создай|создать|поставь|поставить|внеси|внести|сохрани|сохранить|запомни|отметь|занеси|напомни|напомнить)[,.\s]+(мне\s+|пожалуйста\s+|новую\s+|новый\s+|новое\s+)?/i, "")
+    .replace(/^встречу(?=\s)/i, "встреча");
   const low = text.toLowerCase().replace(/ё/g, "е");
   const date = findDate(text), time = findTime(text);
   const escRe = (m) => new RegExp(m.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
