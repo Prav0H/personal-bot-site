@@ -1,29 +1,17 @@
-// «Siri и быстрый ввод»: как сделать команды «Запиши трату / задачу / идею» в приложении «Команды».
+// «Siri и быстрые команды»: одна команда «Скажи Кайросу» — фраза разбирается так же, как кнопка голоса.
 import { $$, esc, toast } from "./ui.js";
 
 const BASE = location.origin + location.pathname;
-const CMDS = [
-  ["expense", "💸", "Запиши трату", "кафе 450 обед", "Сумма и категория первым словом: «такси 380», «продукты 2 150 на неделю». Слово «работа» или «клиент» — трата станет рабочей."],
-  ["task", "✅", "Запиши задачу", "позвонить Стасу", "Попадёт на сегодня. Начните со слова «завтра» — попадёт на завтра."],
-  ["idea", "💡", "Запиши идею", "сделать бота для стоматологий", "Сохранится в «Идеи» — потом оцените её с Claude."],
-];
+const EX = ["такси восемьсот", "завтра в 10 позвонить риелтору", "идея рассылка для клиентов Тропоса", "оплатить аренду 1 декабря сорок пять тысяч"];
 
-export async function render(main) {
-  main.innerHTML = `<div class="top"><div><a href="#/more" class="small">← Ещё</a><h1>Siri и быстрый ввод</h1><div class="sub">Скажите «Привет, Siri, запиши трату» — и продиктуйте</div></div></div>
-    <div class="card"><b>Как настроить (один раз, 3 минуты на команду)</b>
-      <ol class="steps small"><li>Откройте приложение <b>«Команды»</b> на iPhone → <b>＋</b> (новая команда).</li>
-      <li><b>Добавить действие</b> → найдите <b>«Продиктовать текст»</b> → язык: русский.</li>
-      <li>Добавьте действие <b>«Закодировать URL»</b> (оно само возьмёт продиктованный текст).</li>
-      <li>Добавьте действие <b>«Открыть URL»</b>. В поле адреса вставьте ссылку из карточки ниже (кнопка «Скопировать») и сразу после неё — переменную <b>«Закодированный URL»</b>.</li>
-      <li>Нажмите на название вверху и назовите команду, например <b>«Запиши трату»</b> → Готово.</li></ol>
-      <p class="small muted">Команда откроет помощника в Safari. Один раз войдите там тем же кодом — дальше вход запомнится.</p></div>
-    ${CMDS.map(([t, i, name, ex, hint]) => `<div class="card"><div class="row" style="justify-content:space-between"><b>${i} «${name}»</b><button class="btn sm" data-copy="${esc(BASE + "#/add?t=" + t + "&text=")}">Скопировать</button></div>
-      <div class="small" style="margin-top:6px"><code>${esc(BASE)}#/add?t=${t}&amp;text=</code> + продиктованный текст</div>
-      <div class="small muted" style="margin-top:6px">Пример: «${esc(ex)}». ${esc(hint)}</div>
-      <a class="btn sm" style="margin-top:8px" href="#/add?t=${t}&text=${encodeURIComponent(ex)}">Попробовать: «${esc(ex)}»</a></div>`).join("")}
-    <p class="hint center">Эти же ссылки можно поставить в виджет «Команды» на экран «Домой».</p>`;
-  $$("[data-copy]", main).forEach((b) => (b.onclick = async () => {
-    try { await navigator.clipboard.writeText(b.dataset.copy); toast("Ссылка скопирована"); }
-    catch (e) { prompt("Скопируйте ссылку:", b.dataset.copy); }
-  }));
+export function render(main) {
+  const url = BASE + "#/add?text=";
+  main.innerHTML = `<a class="back" href="#/more">‹ Ещё</a><h1>Siri и быстрые команды</h1>
+    <p class="voice">«Привет, Siri, скажи Кайросу» — и диктуете. Кайрос разберёт фразу сам: задача, расход, идея, привычка или событие.</p>
+    <div class="card"><b>Настройка — один раз, 3 минуты</b><ol class="steps small"><li>Приложение <b>«Команды»</b> → <b>＋</b>.</li><li><b>Добавить действие</b> → «<b>Продиктовать текст</b>» (язык — русский).</li><li>Действие «<b>Закодировать URL</b>».</li>
+      <li>Действие «<b>Открыть URL</b>»: вставьте ссылку ниже и сразу после неё — переменную «Закодированный URL».</li><li>Назовите команду «<b>Скажи Кайросу</b>» → Готово.</li></ol>
+      <div class="row" style="justify-content:space-between;margin-top:6px"><code>${esc(url)}</code><button class="btn sm" id="cp">Скопировать</button></div>
+      <p class="hint">Команда откроет Кайрос в Safari — один раз войдите там тем же кодом.</p></div>
+    <div class="cap">Попробовать</div><div class="chips">${EX.map((e) => `<a class="chip" href="#/add?text=${encodeURIComponent(e)}">«${esc(e)}»</a>`).join("")}</div>`;
+  $$("#cp", main).forEach((b) => (b.onclick = async () => { try { await navigator.clipboard.writeText(url); toast("Ссылка скопирована"); } catch (e) { prompt("Скопируйте ссылку:", url); } }));
 }

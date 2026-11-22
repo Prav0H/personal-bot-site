@@ -1,83 +1,92 @@
-// «Сегодня»: главное на день, план, задачи, привычки, быстрые траты.
-import { list, ins, upd, del, ups, today, addDays } from "./db.js";
-import { $, $$, esc, toast, dLong, plural } from "./ui.js";
-import { taskRow, bindTasks, quickAdd, moveSheet } from "./tasks.js";
-import { expenseSheet } from "./money.js";
+// «Сегодня»: план дня по времени из задач, событий и привычек; «самое время» для главного дела.
+import { rows, day, setDay, toggleHabit, habitDone, patch, settings } from "./store.js";
+import { today, addDays } from "./db.js";
+import { $, $$, esc, toast, dLong, plural, rub } from "./ui.js";
+import { toggleDone, taskSheet, moveSheet, deadline } from "./tasks.js";
+import { QUAD, quad, byDeadline, scheduled, scheduleText, goalName, sum } from "./model.js";
+import { eventSheet } from "./calendar.js";
 import { S } from "./main.js";
 
-const TROPOS = "https://prav0h.github.io/tropos-site/#/tasks";
-/** Рабочие задачи из Tropos, назначенные мне, на сегодня и просроченные. */
-async function workTasks(td) {
-  const me = await list("profiles", [["eq", "id", S.uid]]).catch(() => []);
-  const pid = me[0]?.person_id; if (!pid) return [];
-  const end = new Date(td + "T23:59:59").toISOString();
-  return list("tasks", [["eq", "assignee", pid], ["neq", "status", "done"], ["lte", "due_at", end]], "due_at").catch(() => []);
-}
-const streakOf = (days, td) => { const closed = new Set(days.filter((d) => d.closed_at).map((d) => d.day)); let n = 0, d = closed.has(td) ? td : addDays(td, -1); while (closed.has(d)) { n++; d = addDays(d, -1); } return n; };
-
 const hello = () => { const h = new Date().getHours(); return h < 5 ? "Доброй ночи" : h < 12 ? "Доброе утро" : h < 18 ? "Добрый день" : "Добрый вечер"; };
+const hm = (t) => { const [h, m] = (t || "0:0").split(":"); return +h * 60 + +m; };
+const fmt = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const TROPOS = "https://prav0h.github.io/tropos-site/#/tasks";
 
-export async function render(main) {
-  const td = today();
-  const [tasks, late, days, habits, hlog, spent, recent] = await Promise.all([
-    list("pb_tasks", [["eq", "day", td]], ["priority desc", "created_at"]),
-    list("pb_tasks", [["lte", "day", td], ["is", "done_at", null]], ["day"]).then((r) => r.filter((t) => t.day < td)),
-    list("pb_days", [["eq", "day", td]]),
-    list("pb_habits", [["eq", "active", true]], ["sort", "created_at"]),
-    list("pb_habit_log", [["eq", "day", td]]),
-    list("pb_expenses", [["eq", "day", td]]),
-    list("pb_days", [["gte", "day", addDays(td, -60)]]),
-  ]);
-  const streak = streakOf(recent, td);
-  const day = days[0] || {};
-  const open = tasks.filter((t) => !t.done_at), done = tasks.filter((t) => t.done_at);
-  const pct = tasks.length ? Math.round((done.length / tasks.length) * 100) : 0;
-  const spentSum = spent.reduce((a, e) => a + +e.amount, 0);
-  const planned = !!day.planned_at;
+export function render(main) {
+  const td = today(), now = new Date(), nowM = now.getHours() * 60 + now.getMinutes();
+  const tasks = rows("pb_tasks").filter((t) => (t.day === td) || (!t.done_at && t.day && t.day < td) || (t.done_at && new Date(t.done_at).toLocaleDateString("en-CA") === td && t.day && t.day <= td));
+  const events = rows("pb_events").filter((e) => e.day === td);
+  const habits = rows("pb_habits").filter((h) => h.active !== false && scheduled(h, td));
+  const items = [
+    ...tasks.filter((t) => t.time && t.day === td).map((t) => ({ k: "task", at: t.time, t })),
+    ...events.map((e) => ({ k: "event", at: e.time || "", e })),
+    ...habits.filter((h) => h.time).map((h) => ({ k: "habit", at: h.time, h })),
+  ];
+  const untimed = tasks.filter((t) => !t.time || t.day !== td).sort((a, b) => quad(a, td) - quad(b, td) || byDeadline(a, b));
+  // «Самое время»: главное открытое дело без времени — в ближайшее свободное окно
+  const best = untimed.find((t) => !t.done_at && quad(t, td) <= 2);
+  let slot = null;
+  if (best) {
+    const busy = items.filter((i) => i.at).map((i) => hm(i.at));
+    for (let m = Math.max(8 * 60, Math.ceil((nowM + 10) / 60) * 60); m <= 21 * 60; m += 60) if (!busy.some((b) => Math.abs(b - m) < 60)) { slot = m; break; }
+    if (slot != null) items.push({ k: "best", at: fmt(slot), t: best });
+  }
+  items.sort((a, b) => (a.at || "99").localeCompare(b.at || "99"));
+  const openN = tasks.filter((t) => !t.done_at).length, habN = habits.length;
+  const name = (() => { try { return (localStorage.getItem("pb_name") || "").split(" ")[0]; } catch (e) { return ""; } })();
+  const d = day(td);
+  const inboxN = rows("pb_inbox").length;
+  const spent = sum(rows("pb_expenses").filter((e) => e.day === td && !e.planned));
+  const say = `${openN ? `${openN} ${plural(openN, "дело", "дела", "дел")}` : "Дел нет"}${habN ? ` и ${habN} ${plural(habN, "привычка", "привычки", "привычек")}` : ""}.` +
+    (best && slot != null ? ` Окно для «${esc(best.title)}» — с ${fmt(slot)} до ${fmt(slot + 60)}, я его придержал.` : best ? ` Главное сейчас — «${esc(best.title)}».` : "");
 
-  main.innerHTML = `<div class="top"><div><div class="sub">${hello()}</div><h1>Сегодня</h1><div class="sub">${dLong(td)}</div></div>${streak > 1 ? `<div class="tag hot" style="font-size:13px;padding:5px 10px" title="Дней подряд с закрытыми итогами">🔥 ${streak}</div>` : ""}</div>
-    ${tasks.length ? `<div class="card"><div class="row" style="justify-content:space-between;margin-bottom:8px"><b>${done.length} из ${tasks.length} ${plural(tasks.length, "задачи", "задач", "задач")}</b><span class="muted">${pct}%</span></div><div class="progress"><i style="width:${pct}%"></i></div></div>` : ""}
-    <div class="card"><label class="f" style="margin-top:0">🎯 Главное на сегодня</label>
-      <input id="int" value="${esc(day.intention || "")}" placeholder="Одна вещь, которая сделает день удачным" enterkeyhint="done"></div>
-    ${habits.length ? `<h3>Привычки</h3><div class="habits">${habits.map((h) => `<button class="habit${hlog.some((l) => l.habit_id === h.id) ? " on" : ""}" data-h="${h.id}">${hlog.some((l) => l.habit_id === h.id) ? "✓" : "○"} ${esc(h.title)}</button>`).join("")}</div>` : ""}
-    ${late.length ? `<h3>Просрочено · ${late.length}</h3><div class="card flat" id="late">${late.map((t) => taskRow(t, td)).join("")}</div>
-      <div class="row" style="margin:-2px 0 6px"><button class="btn sm" id="lateAll">Все на сегодня</button><button class="btn sm" id="lateMove">Разобрать по одной</button></div>` : ""}
-    <h3>План на день</h3>
-    ${quickAdd(() => ({ day: td, in_plan: !planned || new Date().getHours() < 12 }), () => render(main), "Что нужно сделать сегодня?")}
-    <div class="card flat" id="list">${open.map((t) => taskRow(t, td)).join("") || `<div class="empty">${done.length ? "Всё сделано! 🎉" : "Добавьте задачи на сегодня"}</div>`}</div>
-    ${open.length && !planned ? `<button class="btn wide" id="fix">✅ Утвердить план дня</button><p class="hint center">Вечером сравним план с тем, что получилось</p>` : planned ? `<p class="hint center">План утверждён · вечером — итоги</p>` : ""}
-    ${done.length ? `<h3>Сделано · ${done.length}</h3><div class="card flat" id="done">${done.map((t) => taskRow(t, td)).join("")}</div>` : ""}
+  const row = (i) => {
+    if (i.k === "habit") { const on = habitDone(i.h.id, td); return `<div class="tli${on ? " done" : ""}"><div class="tm">${i.at}</div><button class="dot${on ? " on" : ""}" data-h="${i.h.id}"></button><div class="body" data-h2="${i.h.id}"><div class="tt">${esc(i.h.title)}</div><div class="s">привычка${i.h.minutes ? " · " + i.h.minutes + " минут" : ""}</div></div></div>`; }
+    if (i.k === "event") return `<div class="tli"><div class="tm">${i.at || "весь день"}</div><button class="dot ev" data-e="${i.e.id}"></button><div class="body" data-e="${i.e.id}"><div class="tt">${esc(i.e.title)}</div><div class="s">событие${i.e.remind_at ? " · напомню" : ""}${i.e.note ? " · " + esc(i.e.note.slice(0, 40)) : ""}</div></div></div>`;
+    const t = i.t, q = quad(t, td), on = !!t.done_at;
+    const tags = `${i.k === "best" ? '<span class="tag time">◆ самое время</span>' : ""}${q <= 3 && q !== 2 || q === 2 ? `<span class="tag ${q === 1 ? "gold" : q === 3 ? "terra" : ""}">${QUAD[q].t.toLowerCase()}</span>` : ""}`;
+    const sub = [i.k === "best" ? `${i.at}–${fmt(hm(i.at) + 60)}` : "", t.day && t.day !== td ? deadline(t, td) : "", t.goal_id ? "цель: " + esc(goalName(t.goal_id).toLowerCase()) : "", t.note && /^https?:/.test(t.note) ? `<a href="${esc(t.note.split(/\s/)[0])}" target="_blank" rel="noopener">ссылка ↗</a>` : ""].filter(Boolean).join(" · ");
+    return `<div class="tli${on ? " done" : ""}"><div class="tm">${i.at}</div><button class="dot${on ? " on" : ""}" data-t="${t.id}"></button><div class="body${i.k === "best" ? " box" : ""}" data-t2="${t.id}">${tags ? `<div class="s" style="margin:0 0 4px">${tags}</div>` : ""}<div class="tt">${esc(t.title)}</div>${sub ? `<div class="s">${sub}</div>` : ""}</div></div>`;
+  };
+  const restRows = untimed.filter((t) => !(best && slot != null && t.id === best.id));
+
+  main.innerHTML = `<div class="brand"><img src="icons/icon-192.png" alt="">КАЙРОС</div>
+    <div class="chips scroll" style="margin-bottom:12px"><a class="chip" href="#/inbox">Входящие${inboxN ? ` <span class="n">${inboxN}</span>` : ""}</a><a class="chip" href="#/calendar">Календарь</a><a class="chip" href="#/habits">Привычки</a><a class="chip" href="#/ideas">Идеи</a><a class="chip" href="#/review">Обзор</a><a class="chip" href="#/evening">Итоги дня</a><a class="chip" href="#/more">Ещё</a></div>
+    <div class="cap" style="margin:0">${dLong(td).replace(/^(\d+) (\S+), (\S+)$/, "$3 · $1 $2")}</div>
+    <h1>${hello()}${name ? ", " + esc(name) : ""}.</h1><p class="voice">${say}</p>
+    ${d.intention ? `<div class="card" style="padding:9px 12px"><span class="small muted">🎯 Главное:</span> ${esc(d.intention)}</div>` : ""}
+    <div class="row" style="justify-content:space-between;margin-top:14px"><div class="cap" style="margin:0">План на день</div><a class="small" href="#/calendar">в календаре →</a></div>
+    ${items.length ? `<div class="tl">${items.map(row).join("")}</div>` : `<div class="empty">Ничего не запланировано по времени</div>`}
+    ${restRows.length ? `<div class="cap">Без времени · ${restRows.filter((t) => !t.done_at).length}</div><div class="tl">${restRows.map((t) => row({ k: "task", at: "", t })).join("")}</div>` : ""}
+    <div class="row" style="margin-top:10px"><button class="btn sm" id="nt">＋ Задача</button><button class="btn sm" id="ne">＋ Событие</button><button class="btn sm" id="ni">🎯 Главное</button></div>
     <div id="work"></div>
-    <h3>Деньги сегодня</h3>
-    <div class="card row" style="justify-content:space-between"><div><b>${spentSum ? Math.round(spentSum).toLocaleString("ru-RU") + " ₽" : "Трат нет"}</b><div class="small muted">${spent.length ? `${spent.length} ${plural(spent.length, "запись", "записи", "записей")}` : "Записывайте сразу — так точнее"}</div></div><button class="btn pri sm" id="spend">＋ Трата</button></div>
-    <div class="row" style="margin-top:14px"><a class="btn grow" href="#/evening">🌙 Итоги дня</a><a class="btn grow" href="#/journal">📓 Дневник</a></div>`;
+    <div class="card row" style="justify-content:space-between;margin-top:14px"><div><div class="small muted">Потрачено сегодня</div><b>${spent ? rub(spent) : "—"}</b></div><a class="btn sm" href="#/money">Финансы →</a></div>`;
 
   const re = () => render(main);
-  bindTasks($("#list", main), tasks, re);
-  $("#done", main) && bindTasks($("#done", main), tasks, re);
-  $("#late", main) && bindTasks($("#late", main), late, re);
-  const intInp = $("#int", main);
-  const saveInt = async () => { const v = intInp.value.trim(); if (v === (day.intention || "")) return; try { await ups("pb_days", { day: td, intention: v }, "user_id,day"); day.intention = v; toast("Записано"); } catch (e) { toast(e.message, true); } };
-  intInp.onchange = saveInt; intInp.onkeydown = (e) => e.key === "Enter" && intInp.blur();
-  $$("[data-h]", main).forEach((b) => (b.onclick = async () => {
-    const on = !b.classList.contains("on");
-    b.classList.toggle("on", on); b.textContent = (on ? "✓ " : "○ ") + b.textContent.slice(2);
-    try { if (on) await ins("pb_habit_log", { habit_id: b.dataset.h, day: td }); else await del("pb_habit_log", [["eq", "habit_id", b.dataset.h], ["eq", "day", td]]); }
-    catch (e) { toast(e.message, true); }
-  }));
-  $("#lateAll", main) && ($("#lateAll", main).onclick = async () => { for (const t of late) await upd("pb_tasks", [["eq", "id", t.id]], { day: td }); toast("Перенесено на сегодня"); re(); });
-  $("#lateMove", main) && ($("#lateMove", main).onclick = () => { const t = late[0]; moveSheet(t, re, "Что делаем с задачей?"); });
-  $("#fix", main) && ($("#fix", main).onclick = async () => {
-    try {
-      for (const t of open) if (!t.in_plan) await upd("pb_tasks", [["eq", "id", t.id]], { in_plan: true });
-      await ups("pb_days", { day: td, planned_at: new Date().toISOString() }, "user_id,day");
-      toast("План на день утверждён 💪"); re();
-    } catch (e) { toast(e.message, true); }
-  });
-  $("#spend", main).onclick = () => expenseSheet(null, re);
+  $$("[data-t]", main).forEach((b) => (b.onclick = () => { const t = rows("pb_tasks").find((x) => x.id === b.dataset.t); if (t) { toggleDone(t); re(); } }));
+  $$("[data-t2]", main).forEach((b) => (b.onclick = (e) => { if (e.target.closest("a")) return; const t = rows("pb_tasks").find((x) => x.id === b.dataset.t2); if (!t) return; if (t.day && t.day < td && !t.done_at) moveSheet(t, re, "Просрочено — что делаем?"); else taskSheet(t, re); }));
+  $$("[data-h]", main).forEach((b) => (b.onclick = () => { toggleHabit(b.dataset.h, td); re(); }));
+  $$("[data-h2]", main).forEach((b) => (b.onclick = () => (location.hash = "#/habits")));
+  $$("[data-e]", main).forEach((b) => (b.onclick = () => eventSheet(rows("pb_events").find((x) => x.id === b.dataset.e), re)));
+  $("#nt", main).onclick = () => taskSheet({ day: td }, re);
+  $("#ne", main).onclick = () => eventSheet({ day: td }, re);
+  $("#ni", main).onclick = () => { const v = prompt("Одна вещь, которая сделает день удачным:", d.intention || ""); if (v != null) { setDay(td, { intention: v.trim() }); re(); } };
+  // Рабочие задачи из Tropos (только чтение)
   workTasks(td).then((w) => {
     const box = $("#work", main); if (!box || !w.length) return;
-    const fmt = (t) => { const d = new Date(t.due_at), day = d.toLocaleDateString("en-CA"); return day < td ? `<span class="tag bad">просрочено · ${day.slice(8, 10)}.${day.slice(5, 7)}</span>` : d.getHours() || d.getMinutes() ? d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) : "сегодня"; };
-    box.innerHTML = `<h3>💼 Работа в Tropos · ${w.length}</h3><div class="card flat">${w.slice(0, 12).map((t) => `<a class="li" href="${TROPOS}" target="_blank" rel="noopener" style="color:inherit"><span class="ic">${t.status === "doing" ? "▶️" : "▫️"}</span><div class="tx"><div>${esc(t.title)}</div><div class="s">${fmt(t)}</div></div><span class="ar">›</span></a>`).join("")}</div>`;
+    box.innerHTML = `<div class="cap">Работа в Tropos · ${w.length}</div><div class="card flat">${w.slice(0, 10).map((t) => { const dd = new Date(t.due_at).toLocaleDateString("en-CA"); return `<a class="li" href="${TROPOS}" target="_blank" rel="noopener" style="color:inherit"><span class="bar-l${dd < td ? " t" : ""}"></span><div class="tx"><div>${esc(t.title)}</div><div class="s">${dd < td ? "просрочено" : "сегодня"}</div></div><span class="ar">↗</span></a>`; }).join("")}</div>`;
   });
+}
+
+let workCache = null, workAt = 0;
+async function workTasks(td) {
+  if (workCache && Date.now() - workAt < 120e3) return workCache;
+  try {
+    const { sb, MOCK } = await import("./db.js");
+    if (MOCK) return [];
+    const { data: me } = await sb.from("profiles").select("person_id").eq("id", S.uid).maybeSingle();
+    if (!me?.person_id) return [];
+    const { data } = await sb.from("tasks").select("id,title,due_at,status").eq("assignee", me.person_id).neq("status", "done").lte("due_at", new Date(td + "T23:59:59").toISOString()).order("due_at");
+    workCache = data || []; workAt = Date.now(); return workCache;
+  } catch (e) { return []; }
 }

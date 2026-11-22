@@ -76,3 +76,13 @@ export function aiHtml(text) {
     return `<p>${lines.join("<br>")}</p>`;
   }).join("");
 }
+
+/* ---------- значки (линейные, как в дизайне) ---------- */
+const P = {
+  today: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/>',
+  tasks: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
+  goals: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/>',
+  money: '<path d="M9 20V4h5a4 4 0 0 1 0 8H7M7 16h8"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+};
+export const icon = (k) => `<svg viewBox="0 0 24 24" aria-hidden="true">${P[k] || ""}</svg>`;

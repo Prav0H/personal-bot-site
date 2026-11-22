@@ -5,7 +5,7 @@ import { $, $$, esc } from "./ui.js";
 const pref = (k, v) => { try { if (v === undefined) return localStorage.getItem("pb_" + k); localStorage.setItem("pb_" + k, v); } catch (e) { return null; } };
 
 export async function loginScreen(app, onDone, msg = "") {
-  app.innerHTML = `<div class="login"><div class="logo"><i></i>Личный помощник</div><div id="lb"><div class="boot">Загрузка…</div></div>
+  app.innerHTML = `<div class="login"><div class="logo"><img src="icons/icon-192.png" alt="">КАЙРОС</div><div id="lb"><div class="boot">Загрузка…</div></div>
     <button class="btn ghost" id="byMail" style="margin-top:14px">Войти по почте и паролю</button></div>`;
   $("#byMail").onclick = () => mailForm(app, onDone);
   let people = [];
@@ -33,6 +33,7 @@ export async function loginScreen(app, onDone, msg = "") {
         const j = await tg({ login: "pin", person_id: p.id, pin: code });
         const { error } = await sb.auth.verifyOtp({ token_hash: j.token_hash, type: "magiclink" });
         if (error) throw new Error(error.message);
+        try { localStorage.setItem("pb_name", p.name); } catch (e) {}
         onDone();
       } catch (e) { lb.style.opacity = ""; keypad(p, e.message); $(".pin-dots", lb).classList.add("shake"); }
     };
@@ -47,7 +48,7 @@ export async function loginScreen(app, onDone, msg = "") {
 }
 
 function mailForm(app, onDone, msg = "") {
-  app.innerHTML = `<div class="login"><div class="logo"><i></i>Личный помощник</div>
+  app.innerHTML = `<div class="login"><div class="logo"><img src="icons/icon-192.png" alt="">КАЙРОС</div>
     <form id="lf" class="card"><h2>Вход</h2>${msg ? `<p class="pin-err" style="text-align:left">${esc(msg)}</p>` : ""}
     <label class="f">Почта</label><input name="email" type="email" autocomplete="username" autocapitalize="none" required>
     <label class="f">Пароль</label><input name="password" type="password" autocomplete="current-password" required>
