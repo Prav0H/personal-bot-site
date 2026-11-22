@@ -36,18 +36,38 @@ export function guessText(p) {
   return `Задача${p.day ? " · " + dRel(p.day, today()) : ""}${p.time ? " в " + p.time : ""}`;
 }
 
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let srBroken = false; // распознавание iPhone недоступно — дальше сразу микрофон клавиатуры
+
 export function openVoice(onDone) {
-  let chosen = null;
-  const s = sheet(`<div class="row" style="justify-content:space-between"><button class="btn ghost" data-close>Отмена</button><span class="cap" style="margin:0">Запись</span><span style="width:60px"></span></div>
+  let chosen = null, rec = null, listening = false, finalText = "";
+  const s = sheet(`<div class="cap center" style="margin:2px 0 0">Запись</div>
     <div class="rec-orb"><img src="icons/icon-192.png" alt=""></div>
-    <div class="cap center" style="margin:6px 0">Слушаю</div>
-    <textarea id="vt" placeholder="Нажмите 🎤 на клавиатуре и говорите: «завтра оплатить аренду сорок пять тысяч»" style="font:italic 17px/1.35 var(--serif);text-align:center;min-height:90px;background:transparent;border:1px solid var(--line2)"></textarea>
+    <div class="cap center" style="margin:6px 0" id="vlab">Слушаю</div>
+    <div class="wave" id="wave">${"<i></i>".repeat(24)}</div>
+    <textarea id="vt" placeholder="Говорите: «завтра оплатить аренду сорок пять тысяч»" style="font:italic 17px/1.35 var(--serif);text-align:center;min-height:84px;background:transparent;border:1px solid var(--line2)"></textarea>
     <div class="pv" id="pv"></div>
     <div class="chips" id="vtype" style="justify-content:center"></div>
-    <button class="btn pri wide" id="vs" style="margin-top:12px">Сохранить</button>
-    <p class="hint center">Не уверен — положу во «Входящие», там выберете тип одним касанием.</p>`, { onClose: () => onDone && onDone() });
+    <div class="row" style="margin-top:12px"><button class="btn grow" id="vmic">■ Готово</button><button class="btn pri grow" id="vs">Сохранить</button></div>
+    <p class="hint center" id="vhint">Не уверен — положу во «Входящие», там выберете тип одним касанием.</p>`, { onClose: () => { stop(); onDone && onDone(); } });
   const el = s.el, ta = $("#vt", el);
-  ta.focus(); // в том же касании — iPhone откроет клавиатуру
+  const ui = (on) => { listening = on; el.classList.toggle("listening", on); $("#vlab", el).textContent = on ? "Слушаю" : ta.value.trim() ? "Записано" : "Нажмите «Говорить»"; $("#vmic", el).textContent = on ? "■ Готово" : "🎙 Говорить"; $("#wave", el).style.visibility = on ? "visible" : "hidden"; };
+  const keyboard = (msg) => { ui(false); $("#vhint", el).textContent = msg || "Нажмите 🎤 на клавиатуре iPhone и говорите."; ta.focus(); };
+  function stop() { try { rec && rec.stop(); } catch (e) {} rec = null; }
+  function start() {
+    if (!SR || srBroken) return keyboard(SR ? "Распознавание iPhone недоступно — диктуйте микрофоном клавиатуры 🎤." : "");
+    try {
+      rec = new SR(); rec.lang = "ru-RU"; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
+      finalText = ta.value.trim() ? ta.value.trim() + " " : "";
+      rec.onresult = (e) => { let fin = "", tmp = ""; for (let i = e.resultIndex; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) fin += r[0].transcript; else tmp += r[0].transcript; } finalText += fin; ta.value = (finalText + tmp).trim(); draw(); };
+      rec.onerror = (e) => {
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") { srBroken = true; keyboard("Нет доступа к микрофону или распознаванию. Разрешите: Настройки iPhone → Конфиденциальность → Распознавание речи и Микрофон. Пока — диктуйте клавиатурой 🎤."); }
+        else if (e.error !== "no-speech" && e.error !== "aborted") keyboard("Не расслышал — повторите или продиктуйте клавиатурой 🎤.");
+      };
+      rec.onend = () => { rec = null; ui(false); draw(); };
+      rec.start(); ui(true);
+    } catch (e) { srBroken = true; keyboard(); }
+  }
   const draw = () => {
     const v = ta.value.trim();
     if (!v) { $("#pv", el).innerHTML = ""; $("#vtype", el).innerHTML = ""; return; }
@@ -63,7 +83,10 @@ export function openVoice(onDone) {
     $$("#vtype .chip", el).forEach((b) => (b.onclick = () => { chosen = b.dataset.t; draw(); }));
   };
   ta.oninput = draw;
+  ta.onfocus = () => { if (listening) stop(); };
+  $("#vmic", el).onclick = () => (listening ? stop() : start());
   $("#vs", el).onclick = () => {
+    stop();
     const v = ta.value.trim(); if (!v) return toast("Скажите или напишите что-нибудь", true);
     const p = parse(v, cats());
     try {
@@ -72,4 +95,5 @@ export function openVoice(onDone) {
       s.close();
     } catch (e) { toast(e.message, true); }
   };
+  start(); // в том же касании, что и кнопка 🎙, — так iPhone разрешает запись
 }

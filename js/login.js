@@ -6,12 +6,16 @@ const pref = (k, v) => { try { if (v === undefined) return localStorage.getItem(
 
 export async function loginScreen(app, onDone, msg = "") {
   app.innerHTML = `<div class="login"><div class="logo"><img src="icons/icon-192.png" alt="">КАЙРОС</div><div id="lb"><div class="boot">Загрузка…</div></div>
-    <button class="btn ghost" id="byMail" style="margin-top:14px">Войти по почте и паролю</button></div>`;
+    <p class="hint center" style="margin-top:14px">Вход нужен один раз на этом iPhone — дальше Кайрос открывается сразу.</p>
+    <button class="btn ghost sm" id="byMail" style="margin-top:4px;opacity:.6">или по почте и паролю</button></div>`;
   $("#byMail").onclick = () => mailForm(app, onDone);
   let people = [];
   try { people = JSON.parse(pref("people") || "[]"); } catch (e) { people = []; }
   const fresh = tg({ login: "people" }).then((j) => { pref("people", JSON.stringify(j.people || [])); return j.people || []; });
   if (!people.length) { try { people = await fresh; } catch (e) { return mailForm(app, onDone, e.message); } } else fresh.catch(() => {});
+  // Кайрос — только для Левона: остальных людей Tropos не показываем
+  const me = people.filter((p) => /левон/i.test(p.name));
+  if (me.length) people = me;
   if (!people.length) return mailForm(app, onDone, "Код для входа ещё не задан — войдите по почте и паролю или задайте код в Tropos (Профиль).");
   const lb = $("#lb");
   const chooser = () => {

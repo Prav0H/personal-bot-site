@@ -11,11 +11,11 @@
   color-scheme:dark;
 }
 /* Приложение с экрана «Домой»: сверху часы и вырез, снизу полоска — отступы не меньше этих */
-@media (display-mode:standalone){:root{--top:max(env(safe-area-inset-top,0px),20px)}}
+
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font:13px/1.4 var(--font);-webkit-text-size-adjust:100%}
 /* Каркас: прокручивается только середина, меню — обычный блок внизу (без «плавающих» элементов, которые iPhone сдвигает) */
-#app{height:100%;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+#app{position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden}
 h1{font:400 28px/1.12 var(--serif);margin:2px 0 4px;letter-spacing:-.01em}
 h2{font:400 21px/1.2 var(--serif);margin:0 0 8px}
 h3,.cap{font:500 10.5px/1.3 var(--serif);text-transform:uppercase;letter-spacing:.14em;color:var(--gold);margin:20px 2px 8px}
@@ -247,3 +247,10 @@ details summary{cursor:pointer;list-style:none} details summary::-webkit-details
 .bar.dim{opacity:.4}
 .sheet .x{position:sticky;top:0;float:right;margin:-2px -6px 0 8px;width:34px;height:34px;border-radius:50%;border:1px solid var(--line2);background:var(--card);color:var(--muted);font-size:17px;line-height:1;cursor:pointer;z-index:2}
 .sheet-wrap{touch-action:none}.sheet{touch-action:pan-y}
+.wave{display:flex;gap:3px;justify-content:center;align-items:center;height:26px;margin:2px 0 10px;visibility:hidden}
+.wave i{width:3px;border-radius:2px;background:var(--gold);height:5px;opacity:.85}
+.listening .wave i{animation:wv 1s ease-in-out infinite}
+.wave i:nth-child(3n){animation-delay:.15s}.wave i:nth-child(3n+1){animation-delay:.3s}.wave i:nth-child(4n){animation-delay:.45s}.wave i:nth-child(5n){animation-delay:.6s}
+@keyframes wv{0%,100%{height:5px}50%{height:24px}}
+.listening .rec-orb{animation:pulse 1.6s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(212,174,94,.45)}70%{box-shadow:0 0 0 18px rgba(212,174,94,0)}100%{box-shadow:0 0 0 0 rgba(212,174,94,0)}}
