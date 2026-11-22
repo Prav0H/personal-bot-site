@@ -61,24 +61,30 @@ export function openVoice(onDone) {
   let userStop = false, restarts = 0, until = 0, gotText = false;
   function stop() { userStop = true; const r = rec; rec = null; try { r && (gotText ? r.stop() : r.abort()); } catch (e) {} if (listening) { ui(false); draw(); } }
   function launch() {
-    try { active && active.abort(); } catch (e) {}
-    const r = new SR(); rec = r; active = r;
-    r.lang = "ru-RU"; r.interimResults = true; r.continuous = true; r.maxAlternatives = 1; // continuous: не обрывать на паузе (где поддерживается)
+    // iPhone: одна запись на всё приложение, повторно запускаем её же; если она ещё работает — ждём, пока закроется
+    if (!active) { active = new SR(); active.lang = "ru-RU"; active.interimResults = true; active.continuous = true; active.maxAlternatives = 1; active._on = false; }
+    const r = active; rec = r;
+    if (r._on) { try { r.abort(); } catch (e) {} let w = 0; const wait = () => { if (!r._on || ++w > 15) { r._on = false; if (!userStop) launch(); } else setTimeout(wait, 100); }; setTimeout(wait, 100); return; }
     let started = false, base = finalText;
-    r.onstart = () => (started = true);
+    r.onstart = () => { started = true; r._on = true; };
     r.onresult = (e) => { let fin = "", tmp = ""; for (let i = 0; i < e.results.length; i++) { const x = e.results[i]; if (x.isFinal) fin += x[0].transcript; else tmp += x[0].transcript; } finalText = (base + " " + fin).trim(); ta.value = (finalText + " " + tmp).trim(); if (ta.value) gotText = true; draw(); };
     r.onerror = (e) => {
       if ((e.error === "not-allowed" || e.error === "service-not-allowed") && restarts > 0) { userStop = true; return; } // авто-продолжение запрещено — просто заканчиваем
       if (e.error === "not-allowed" || e.error === "service-not-allowed") { userStop = true; srBroken = true; keyboard("Нет доступа к микрофону или распознаванию. Разрешите: Настройки iPhone → Конфиденциальность → Распознавание речи и Микрофон. Пока — диктуйте клавиатурой 🎤."); }
     };
     r.onend = () => {
+      r._on = false;
       if (rec !== r) return;
       rec = null;
       if (!userStop && Date.now() < until && restarts < 12) { restarts++; setTimeout(() => { if (!userStop) launch(); }, 120); return; } // пауза — слушаем дальше
       if (listening) { ui(false); draw(); if (!gotText) $("#vhint", el).textContent = "Не расслышал. Нажмите «Говорить» и скажите ещё раз — или продиктуйте клавиатурой 🎤."; }
     };
-    r.start();
-    setTimeout(() => { if (!started && rec === r && !gotText) { try { r.abort(); } catch (e) {} rec = null; if (!userStop) keyboard("Распознавание не запустилось — нажмите «Говорить» ещё раз или продиктуйте клавиатурой."); } }, 3500);
+    try { r.start(); }
+    catch (e) { // «уже запущено» — закрыть и повторить один раз
+      try { r.abort(); } catch (x) {}
+      r._on = false; setTimeout(() => { try { if (!userStop) r.start(); } catch (x) { keyboard("Распознавание занято — нажмите «Говорить» ещё раз."); } }, 300);
+    }
+    setTimeout(() => { if (!started && rec === r && !gotText) { try { r.abort(); } catch (e) {} r._on = false; rec = null; if (!userStop) keyboard("Распознавание не запустилось — нажмите «Говорить» ещё раз или продиктуйте клавиатурой."); } }, 3500);
   }
   function start() {
     if (!SR) return keyboard();
